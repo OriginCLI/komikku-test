@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#081217" />
+  <title>PalGuide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header><div class="topline"><div class="brand"><div class="logo">PG</div><div><h1>PalGuide</h1><div class="subtitle">Offline companion + live 1.0 map</div></div></div><div class="data-pill" id="dataPill">Loading data…</div></div></header>
+<main>
+  <section class="page active" id="homePage">
+    <div class="grid">
+      <div class="card hero span-12"><h2>Your Palworld tools in one fast Android guide.</h2><p>Find low-number breeding routes, track your Paldex, plan balanced bases, save coordinates, and jump into a current interactive spawn map.</p><div class="actions"><button class="btn primary" data-go="breed">Find a breeding route</button><button class="btn" data-go="paldex">Browse Paldex</button><a class="btn secondary" href="https://tracker.game/palworld">Open live map</a></div></div>
+      <div class="card span-3"><div class="stat" id="palCount">0</div><div class="stat-label">Offline Pals</div></div><div class="card span-3"><div class="stat" id="ownedCount">0</div><div class="stat-label">Marked owned</div></div><div class="card span-3"><div class="stat" id="favCount">0</div><div class="stat-label">Favorites</div></div><div class="card span-3"><div class="stat" id="checkCount">0%</div><div class="stat-label">Base essentials complete</div></div>
+      <div class="card quick span-4"><h3>Breeding calculator</h3><p>Select the child you want. Parent combinations are normalized and ranked from the lowest Paldeck numbers.</p><button class="btn small primary" data-go="breed">Calculate</button></div>
+      <div class="card quick span-4"><h3>Base planner</h3><p>Persistent checklists for production, breeding, food, comfort, storage, and defense.</p><button class="btn small" data-go="base">Plan base</button></div>
+      <div class="card quick span-4"><h3>Map & coordinates</h3><p>Save your own pins offline and open a maintained live map for Pal spawn searches.</p><button class="btn small" data-go="map">Open map tools</button></div>
+      <div class="card span-12"><div class="notice mint"><b>Version note:</b> the offline Paldex and breeding matrix are a community snapshot bundled into this APK. The Live Map button opens current web data, including post-1.0 changes. The app never requires an account.</div></div>
+    </div>
+  </section>
+
+  <section class="page" id="breedPage">
+    <div class="page-title"><div><h2>Breeding</h2><p>Choose the child first, then compare the lowest-number parent routes.</p></div></div>
+    <div class="grid">
+      <div class="card span-12"><div class="toolbar"><div class="field"><label>Desired child</label><input class="input" id="childSearch" list="childOptions" placeholder="Type a name or number" autocomplete="off"><datalist id="childOptions"></datalist></div><label class="switch"><input type="checkbox" id="ownedFirst"> Prioritize pairs I already own</label><button class="btn primary" id="breedButton">Find pairs</button></div><div class="notice" style="margin-top:12px">Ranking uses the lower parent number first, then the higher parent number. With owned prioritization enabled, complete owned pairs appear first and retain the same low-number order.</div></div>
+      <div class="card span-8"><div class="section-head"><h3 id="breedResultTitle">Parent combinations</h3><div class="count" id="pairCount">Select a child</div></div><div class="pair-list" id="pairList"><div class="empty">Choose the Pal you want to breed.</div></div></div>
+      <div class="card span-4"><div class="section-head"><h3>Owned Pals</h3><button class="btn small danger" id="clearOwned">Clear</button></div><p style="color:var(--muted);font-size:12px;line-height:1.5">Tap a parent inside any result to mark it owned. This list is stored only on your device.</p><div class="tags" id="ownedTags"></div></div>
+    </div>
+  </section>
+
+  <section class="page" id="paldexPage">
+    <div class="page-title"><div><h2>Paldex</h2><p>Search by name, number, type, drop, or work suitability.</p></div></div>
+    <div class="card"><div class="toolbar"><div class="field"><label>Search</label><input class="input" id="palSearch" placeholder="Anubis, mining, water…"></div><div class="field"><label>Type</label><select id="typeFilter"><option value="">All types</option></select></div><div class="field"><label>Work</label><select id="workFilter"><option value="">All work</option></select></div><label class="switch"><input type="checkbox" id="ownedOnly"> Owned only</label></div></div>
+    <div class="section-head" style="margin-top:14px"><h3>Results</h3><div class="count" id="paldexCount"></div></div><div class="pal-list" id="palList"></div>
+  </section>
+
+  <section class="page" id="basePage">
+    <div class="page-title"><div><h2>Base planner</h2><p>A practical essentials checklist that stays saved offline.</p></div><button class="btn small danger" id="resetChecks">Reset checks</button></div>
+    <div class="grid"><div class="card span-7"><div class="section-head"><h3>Essentials</h3><div class="count" id="baseProgressText"></div></div><div class="progress"><span id="baseProgressBar"></span></div><div id="checkGroups" style="margin-top:14px"></div></div>
+      <div class="card span-5"><h3 style="margin-top:0">Choose a strong location</h3><div class="criteria"><div class="criterion"><b>Flat build area</b><p>Enough room for large workstations without pathing bottlenecks.</p></div><div class="criterion"><b>Resource access</b><p>Prioritize the resources this base is meant to automate.</p></div><div class="criterion"><b>Clear routes</b><p>Avoid cliffs and narrow doors between beds, food, and work.</p></div><div class="criterion"><b>Climate</b><p>Prepare heat or cold protection before committing workers.</p></div><div class="criterion"><b>Fast travel</b><p>Useful early; less important after your transport network matures.</p></div><div class="criterion"><b>Raid exposure</b><p>Natural walls help, but do not trade away all usable floor space.</p></div></div><div class="notice" style="margin-top:12px">Terrain and resource nodes can change between updates. Save promising coordinates on the Map tab and verify them in your current world.</div></div>
+    </div>
+  </section>
+
+  <section class="page" id="mapPage">
+    <div class="page-title"><div><h2>Map tools</h2><p>Current online spawn map plus private offline coordinate pins.</p></div><a class="btn primary" href="https://tracker.game/palworld">Open live map</a></div>
+    <div class="grid"><div class="card span-7"><div class="section-head"><h3>Saved coordinates</h3><div class="count">X/Y grid</div></div><div class="map-grid" id="pinMap"><div class="map-cross"></div><div class="map-cross h"></div></div></div>
+      <div class="card span-5"><div class="toolbar"><div class="field"><label>Name</label><input class="input" id="pinName" placeholder="Ore base"></div><div class="field"><label>X</label><input class="input" id="pinX" type="number" placeholder="0"></div><div class="field"><label>Y</label><input class="input" id="pinY" type="number" placeholder="0"></div><button class="btn primary" id="addPin">Save pin</button></div><div class="location-list" id="locationList" style="margin-top:14px"></div></div>
+      <div class="card span-12"><div class="section-head"><h3>Find a Pal on the current map</h3></div><div class="toolbar"><div class="field"><label>Pal</label><input class="input" id="mapPalSearch" list="mapPalOptions" placeholder="Choose a Pal"><datalist id="mapPalOptions"></datalist></div><a class="btn primary" href="https://tracker.game/palworld">Search spawn areas</a></div><p class="footer-note">The live map opens inside PalGuide. Use its Pal/spawner filters for the latest spawn regions, dungeons, bosses, and update-specific locations.</p></div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs"><div class="tab-inner"><button class="tab active" data-tab="home"><span>⌂</span>Home</button><button class="tab" data-tab="breed"><span>◇</span>Breed</button><button class="tab" data-tab="paldex"><span>▦</span>Paldex</button><button class="tab" data-tab="base"><span>▤</span>Base</button><button class="tab" data-tab="map"><span>⌖</span>Map</button></div></nav>
+
+<dialog id="palDialog"><div class="modal-head"><div class="num-badge" id="modalNum"></div><h3 id="modalName"></h3><button class="icon-btn" id="closeModal">×</button></div><div class="modal-body" id="modalBody"></div></dialog>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
