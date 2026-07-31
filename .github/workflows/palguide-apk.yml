@@ -1,0 +1,84 @@
+name: Build PalGuide APK
+
+on:
+  pull_request:
+    paths:
+      - 'palguide/**'
+      - '.github/workflows/palguide-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Generate offline community data
+        shell: bash
+        run: |
+          set -euo pipefail
+          PALS_URL='https://raw.githubusercontent.com/mlg404/palworld-paldex-api/refs/heads/main/src/pals.json'
+          BREEDING_URL='https://raw.githubusercontent.com/mlg404/palworld-paldex-api/refs/heads/main/src/breeding.json'
+          if curl --retry 3 --fail --location --silent --show-error "$PALS_URL" -o /tmp/pals.json \
+             && curl --retry 3 --fail --location --silent --show-error "$BREEDING_URL" -o /tmp/breeding.json; then
+            python3 - <<'PY'
+          import datetime, json, pathlib
+          pals = json.loads(pathlib.Path('/tmp/pals.json').read_text(encoding='utf-8'))
+          breeding = json.loads(pathlib.Path('/tmp/breeding.json').read_text(encoding='utf-8'))
+          if isinstance(pals, dict):
+              pals = pals.get('content') or pals.get('pals') or list(pals.values())
+          if not isinstance(pals, list) or not isinstance(breeding, dict):
+              raise SystemExit('Unexpected upstream data structure')
+          output = pathlib.Path('palguide/app/src/main/assets/data.js')
+          output.write_text(
+              'window.PALS=' + json.dumps(pals, ensure_ascii=False, separators=(',', ':')) + ';\n' +
+              'window.BREEDING=' + json.dumps(breeding, ensure_ascii=False, separators=(',', ':')) + ';\n' +
+              'window.DATA_META=' + json.dumps({
+                  'label': 'Community offline snapshot',
+                  'source': 'mlg404/palworld-paldex-api',
+                  'generated': datetime.date.today().isoformat(),
+                  'offlineCount': len(pals)
+              }, separators=(',', ':')) + ';\n',
+              encoding='utf-8'
+          )
+          print(f'Generated offline dataset with {len(pals)} Pals and {len(breeding)} child entries')
+          PY
+          else
+            echo 'Upstream data unavailable; retaining the bundled fallback sample.'
+          fi
+
+      - name: Build signed debug APK
+        working-directory: palguide
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Prepare deliverables
+        shell: bash
+        run: |
+          mkdir -p deliverables
+          cp palguide/app/build/outputs/apk/debug/app-debug.apk deliverables/PalGuide-v0.1.0.apk
+          zip -qr deliverables/PalGuide-v0.1.0-source.zip palguide .github/workflows/palguide-apk.yml
+          sha256sum deliverables/PalGuide-v0.1.0.apk > deliverables/PalGuide-v0.1.0.apk.sha256
+
+      - name: Upload APK and source
+        uses: actions/upload-artifact@v4
+        with:
+          name: PalGuide-build
+          path: deliverables/*
+          if-no-files-found: error
+          retention-days: 30
