@@ -29,38 +29,177 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Generate offline community data
+      - name: Generate Palworld 1.0 offline data
         shell: bash
         run: |
           set -euo pipefail
-          PALS_URL='https://raw.githubusercontent.com/mlg404/palworld-paldex-api/refs/heads/main/src/pals.json'
-          BREEDING_URL='https://raw.githubusercontent.com/mlg404/palworld-paldex-api/refs/heads/main/src/breeding.json'
-          if curl --retry 3 --fail --location --silent --show-error "$PALS_URL" -o /tmp/pals.json \
-             && curl --retry 3 --fail --location --silent --show-error "$BREEDING_URL" -o /tmp/breeding.json; then
+          SOURCE_URL='https://raw.githubusercontent.com/palcalc-tools/palworld-1.0-calculator/refs/heads/main/index.html'
+          if curl --retry 3 --fail --location --silent --show-error "$SOURCE_URL" -o /tmp/palcalc.html; then
             python3 - <<'PY'
-          import datetime, json, pathlib
-          pals = json.loads(pathlib.Path('/tmp/pals.json').read_text(encoding='utf-8'))
-          breeding = json.loads(pathlib.Path('/tmp/breeding.json').read_text(encoding='utf-8'))
-          if isinstance(pals, dict):
-              pals = pals.get('content') or pals.get('pals') or list(pals.values())
-          if not isinstance(pals, list) or not isinstance(breeding, dict):
-              raise SystemExit('Unexpected upstream data structure')
+          import bisect
+          import datetime
+          import json
+          import pathlib
+          import re
+
+          html = pathlib.Path('/tmp/palcalc.html').read_text(encoding='utf-8')
+
+          def read_const(name):
+              match = re.search(rf'const\s+{name}\s*=\s*(\{{.*?\}});\s*\n', html, re.S)
+              if not match:
+                  raise SystemExit(f'Could not find {name} in upstream calculator')
+              return json.loads(match.group(1))
+
+          data = read_const('DATA')
+          work = read_const('WORK')
+          combat = read_const('COMBAT')
+          source_pals = data['pals']
+          unique_rows = data['unique']
+
+          def deck_key(deck):
+              match = re.match(r'^(\d+)(.*)$', str(deck))
+              if not match:
+                  raise ValueError(f'Unexpected Paldeck value: {deck!r}')
+              return f'{int(match.group(1)):03d}{match.group(2)}'
+
+          def deck_sort(deck):
+              match = re.match(r'^(\d+)(.*)$', str(deck))
+              return (int(match.group(1)), match.group(2))
+
+          # PalGuide focuses on numbered Paldeck forms. The upstream tool also
+          # contains unnumbered crossover/boss records, which are not useful for
+          # the user's requested lowest-Paldeck-number ordering.
+          code_to_key = {
+              code: deck_key(info['deck'])
+              for code, info in source_pals.items()
+              if str(info.get('deck') or '').strip()
+          }
+          parent_codes = sorted(code_to_key, key=lambda c: deck_sort(source_pals[c]['deck']))
+
+          work_names = {
+              'Handcraft': 'handiwork',
+              'Transport': 'transporting',
+              'Watering': 'watering',
+              'Seeding': 'planting',
+              'GenerateElectricity': 'generating electricity',
+              'Collection': 'gathering',
+              'Deforest': 'lumbering',
+              'Mining': 'mining',
+              'ProductMedicine': 'medicine production',
+              'Cool': 'cooling',
+              'EmitFlame': 'kindling',
+              'MonsterFarm': 'farming',
+          }
+          element_names = {
+              'Normal': 'neutral',
+              'Leaf': 'grass',
+              'Earth': 'ground',
+              'Electricity': 'electric',
+          }
+
+          pals_out = []
+          for code in parent_codes:
+              info = source_pals[code]
+              stats = combat.get(code, [])
+              types = []
+              for element in (stats[3:5] if len(stats) >= 5 else []):
+                  if element and element != 'None':
+                      types.append(element_names.get(element, element.lower()))
+              suitability = [
+                  {'type': work_names.get(kind, kind.lower()), 'level': int(level)}
+                  for kind, level in work.get(code, {}).items()
+              ]
+              number_match = re.match(r'^(\d+)', str(info['deck']))
+              pals_out.append({
+                  'id': int(number_match.group(1)),
+                  'key': code_to_key[code],
+                  'name': info['name'],
+                  'types': types,
+                  'suitability': suitability,
+                  'drops': [],
+                  'description': f"Palworld 1.0 Paldeck entry. Breeding rank {info['rank']}.",
+                  'stats': {
+                      'attack': stats[0] if len(stats) > 0 else None,
+                      'hp': stats[1] if len(stats) > 1 else None,
+                      'defense': stats[2] if len(stats) > 2 else None,
+                  },
+                  'breeding': {
+                      'rank': info['rank'],
+                      'maleChance': info.get('male'),
+                      'rankResult': bool(info.get('rankResult')),
+                  },
+              })
+
+          eligible = sorted(
+              ((code, int(info['rank'])) for code, info in source_pals.items() if info.get('rankResult')),
+              key=lambda item: item[1],
+          )
+          eligible_ranks = [rank for _, rank in eligible]
+
+          def nearest(target):
+              pos = bisect.bisect_left(eligible_ranks, target)
+              candidates = []
+              for idx in (pos, pos - 1, pos + 1):
+                  if 0 <= idx < len(eligible):
+                      candidates.append(eligible[idx])
+              best_code, best_rank = candidates[0]
+              best_distance = abs(best_rank - target)
+              for code, rank in candidates[1:]:
+                  distance = abs(rank - target)
+                  if distance < best_distance or (distance == best_distance and rank > best_rank):
+                      best_code, best_rank, best_distance = code, rank, distance
+              return best_code
+
+          directional_key = tuple(sorted(('CatMage', 'FoxMage')))
+          directional_children = ('FoxMage_Dark', 'CatMage_Fire')
+          unique_map = {}
+          for parent_a, parent_b, child in unique_rows:
+              pair_key = tuple(sorted((parent_a, parent_b)))
+              if pair_key != directional_key:
+                  unique_map[pair_key] = child
+
+          def children_for(parent_a, parent_b):
+              pair_key = tuple(sorted((parent_a, parent_b)))
+              if pair_key == directional_key:
+                  return directional_children
+              if pair_key in unique_map:
+                  return (unique_map[pair_key],)
+              if parent_a == parent_b:
+                  return (parent_a,)
+              target = (int(source_pals[parent_a]['rank']) + int(source_pals[parent_b]['rank']) + 1) // 2
+              return (nearest(target),)
+
+          breeding = {key: [] for key in code_to_key.values()}
+          for i, parent_a in enumerate(parent_codes):
+              for parent_b in parent_codes[i:]:
+                  pair = [code_to_key[parent_a], code_to_key[parent_b]]
+                  for child in children_for(parent_a, parent_b):
+                      child_key = code_to_key.get(child)
+                      if child_key:
+                          breeding[child_key].append(pair)
+
+          total_pairs = sum(len(pairs) for pairs in breeding.values())
+          if len(pals_out) < 280 or total_pairs < 40000:
+              raise SystemExit(f'Incomplete 1.0 extraction: {len(pals_out)} Pals, {total_pairs} reverse pairs')
+
           output = pathlib.Path('palguide/app/src/main/assets/data.js')
           output.write_text(
-              'window.PALS=' + json.dumps(pals, ensure_ascii=False, separators=(',', ':')) + ';\n' +
+              'window.PALS=' + json.dumps(pals_out, ensure_ascii=False, separators=(',', ':')) + ';\n' +
               'window.BREEDING=' + json.dumps(breeding, ensure_ascii=False, separators=(',', ':')) + ';\n' +
               'window.DATA_META=' + json.dumps({
-                  'label': 'Community offline snapshot',
-                  'source': 'mlg404/palworld-paldex-api',
+                  'label': 'Palworld 1.0 numbered snapshot',
+                  'source': 'palcalc-tools/palworld-1.0-calculator',
                   'generated': datetime.date.today().isoformat(),
-                  'offlineCount': len(pals)
+                  'offlineCount': len(pals_out),
+                  'reversePairCount': total_pairs,
+                  'gameVersion': '1.0',
               }, separators=(',', ':')) + ';\n',
               encoding='utf-8'
           )
-          print(f'Generated offline dataset with {len(pals)} Pals and {len(breeding)} child entries')
+          print(f'Generated Palworld 1.0 data: {len(pals_out)} numbered Pals, {total_pairs} reverse parent pairs')
           PY
           else
-            echo 'Upstream data unavailable; retaining the bundled fallback sample.'
+            echo 'Current 1.0 source unavailable; retaining the bundled fallback sample.'
           fi
 
       - name: Build signed debug APK
